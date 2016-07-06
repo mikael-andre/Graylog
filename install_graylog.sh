@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 #==============================================================================
 #title         : install_graylog.sh
 #description   : This script will install Graylog components (server and web).
@@ -6,12 +6,12 @@
 #job title     : Network engineer
 #mail          : mikael.andre.1989@gmail.com
 #created       : 20150219
-#last revision : 20150426
-#version       : 1.4
+#last revision : 20150921
+#version       : 1.5
 #platform      : Linux
 #processor     : 64 Bits
 #os            : CentOS
-#os version    : 6.5 or 6.6
+#os version    : 6.5 to 6.7
 #usage         : sh install_graylog.sh -i | -a <file.cfg> | -v (options)
 #                options are --cfg <file.cfg> | --cnx | --sys
 #notes         : Copy and paste in Vi to use this script
@@ -45,7 +45,9 @@ BOOLEAN_RSA_AUTH=
 RSA_PUBLIC_KEY=
 # MONGO VARIABLES
 BOOLEAN_MONGO_ONSTARTUP=
-MONGODB_ADMIN_DATABASE='admin'
+MONGO_HOST_NAME=
+MONGO_PORT_NUMBER=
+MONGO_ADMIN_DATABASE='admin'
 MONGO_ADMIN_USER='admin'
 MONGO_ADMIN_PASSWORD=
 MONGO_GRAYLOG_DATABASE=
@@ -63,7 +65,6 @@ SSL_SUBJECT_EMAIL=
 # JAVA VARIABLES
 ELASTICSEARCH_RAM_RESERVATION=
 GRAYLOGSERVER_RAM_RESERVATION=
-#GRAYLOGWEBGUI_RAM_RESERVATION="256m"
 # ELASTICSEARCH VARIABLES
 BOOLEAN_ELASTICSEARCH_ONSTARTUP=
 BOOLEAN_INSTALL_ELASTICSEARCHPLUGIN=
@@ -74,6 +75,8 @@ GRAYLOG_SECRET_PASSWORD=
 GRAYLOG_ADMIN_USERNAME=
 GRAYLOG_ADMIN_PASSWORD=
 BOOLEAN_GRAYLOG_SMTP=
+GRAYLOGWEB_HOST_NAME=
+GRAYLOGWEB_PORT_NUMBER=
 # SMTP VARIABLES
 SMTP_HOST_NAME=
 SMTP_DOMAIN_NAME=
@@ -85,6 +88,12 @@ SMTP_AUTH_USERNAME=
 SMTP_AUTH_PASSWORD=
 # NGINX VARIABLES
 BOOLEAN_NGINX_ONSTARTUP=
+# IPTABLES VARIABLES
+BOOLEAN_IPTABLES_ONSTARTUP=
+DEFAULT_SYSLOG_PORT='514'
+CUSTOM_SYSLOG_PORT=
+DEFAULT_SNMPTRAP_PORT='162'
+CUSTOM_SNMPTRAP_PORT=
 # TERMINAL VARIABLES
 RES_COL="60"
 RES_COL1="67"
@@ -431,7 +440,7 @@ function set_globalvariables() {
   then
     if [ -z "${NEW_NTP_ADDRESS}" ]
     then
-      while [[ ! "${NEW_NTP_ADDRESS}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${NEW_NTP_ADDRESS}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]]
+      while [[ ! "${NEW_NTP_ADDRESS}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${NEW_NTP_ADDRESS}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] && [[ ! "${NEW_NTP_ADDRESS}" =~ ^localhost$ ]]
       do
         echo -e "\nType IP address or hostname of NTP server, followed by [ENTER]"
         echo -e "Default to [${SETCOLOR_INFO}ntp.test.fr${SETCOLOR_NORMAL}]:"
@@ -448,7 +457,7 @@ function set_globalvariables() {
       if [ "${?}" == "0" ]
       then
         NEW_NTP_ADDRESS=
-        while [[ ! "${NEW_NTP_ADDRESS}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${NEW_NTP_ADDRESS}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]]
+        while [[ ! "${NEW_NTP_ADDRESS}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${NEW_NTP_ADDRESS}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] && [[ ! "${NEW_NTP_ADDRESS}" =~ ^localhost$ ]]
         do
           echo -e "\nType IP address or hostname of NTP server, followed by [ENTER]"
           echo -e "Default to [${SETCOLOR_WARNING}${old_input_value}${SETCOLOR_NORMAL}]:"
@@ -498,6 +507,76 @@ function set_globalvariables() {
     fi
   fi
   echo "BOOLEAN_NTP_ONSTARTUP='${BOOLEAN_NTP_ONSTARTUP}'" >> ${installation_cfg_tmpfile}
+  if [ -z "${MONGO_HOST_NAME}" ]
+  then
+    while [[ ! "${MONGO_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${MONGO_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] && [[ ! "${MONGO_HOST_NAME}" =~ ^localhost$ ]]
+    do
+      echo -e "\nType IP address or hostname of MONGO database server, followed by [ENTER]"
+      echo -e "Default to [${SETCOLOR_INFO}127.0.0.1${SETCOLOR_NORMAL}]:"
+      echo -en "> "
+      read MONGO_HOST_NAME
+      if [ -z "${MONGO_HOST_NAME}" ]
+      then
+        MONGO_HOST_NAME='127.0.0.1'
+      fi
+    done
+  else
+    old_input_value=${MONGO_HOST_NAME}
+    yes_no_function "Can you confirm you want to modify current IP address or hostname of MONGO database server ?" "yes"
+    if [ "${?}" == "0" ]
+    then
+      MONGO_HOST_NAME=
+      while [[ ! "${MONGO_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${MONGO_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] && [[ ! "${MONGO_HOST_NAME}" =~ ^localhost$ ]]
+      do
+        echo -e "\nType IP address or hostname of MONGO database server, followed by [ENTER]"
+        echo -e "Default to [${SETCOLOR_WARNING}${old_input_value}${SETCOLOR_NORMAL}]:"
+        echo -en "> "
+        read MONGO_HOST_NAME
+        if [ -z "${MONGO_HOST_NAME}" ]
+        then
+          MONGO_HOST_NAME=${old_input_value}
+        fi
+      done
+    else
+      MONGO_HOST_NAME=${old_input_value}
+    fi
+  fi
+  echo "MONGO_HOST_NAME='${MONGO_HOST_NAME}'" >> ${installation_cfg_tmpfile}
+  if [ -z "${MONGO_PORT_NUMBER}" ]
+  then
+    while [[ ! "${MONGO_PORT_NUMBER}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+    do
+      echo -e "\nType MONGO database server port number (possible values : ${SETCOLOR_FAILURE}1024${SETCOLOR_NORMAL} to ${SETCOLOR_FAILURE}63355${SETCOLOR_NORMAL}), followed by [ENTER]"
+      echo -e "Default to [${SETCOLOR_INFO}9000${SETCOLOR_NORMAL}]:"
+      echo -en "> "
+      read MONGO_PORT_NUMBER
+      if [ -z "${MONGO_PORT_NUMBER}" ]
+      then
+        MONGO_PORT_NUMBER='9000'
+      fi
+    done
+  else
+    old_input_value=${MONGO_PORT_NUMBER}
+    yes_no_function "Can you confirm you want to modify current port number of MONGO database server ?" "yes"
+    if [ "${?}" == "0" ]
+    then
+      MONGO_PORT_NUMBER=
+      while [[ ! "${MONGO_PORT_NUMBER}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+      do
+        echo -e "\nType MONGO database server port number (possible values : ${SETCOLOR_FAILURE}1024${SETCOLOR_NORMAL} to ${SETCOLOR_FAILURE}63355${SETCOLOR_NORMAL}), followed by [ENTER]"
+        echo -e "Default to [${SETCOLOR_WARNING}${old_input_value}${SETCOLOR_NORMAL}]:"
+        echo -en "> "
+        read MONGO_PORT_NUMBER
+        if [ -z "${MONGO_PORT_NUMBER}" ]
+        then
+          MONGO_PORT_NUMBER=${old_input_value}
+        fi
+      done
+    else
+      MONGO_PORT_NUMBER=${old_input_value}
+    fi
+  fi
+  echo "MONGO_PORT_NUMBER='${MONGO_PORT_NUMBER}'" >> ${installation_cfg_tmpfile}
   if [ -z "${MONGO_ADMIN_PASSWORD}" ]
   then
     while [ -z "${MONGO_ADMIN_PASSWORD}" ]
@@ -1113,6 +1192,76 @@ function set_globalvariables() {
     fi
   fi
   echo "GRAYLOG_ADMIN_PASSWORD='${GRAYLOG_ADMIN_PASSWORD}'" >> ${installation_cfg_tmpfile}
+  if [ -z "${GRAYLOGWEB_HOST_NAME}" ]
+  then
+    while [[ ! "${GRAYLOGWEB_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${GRAYLOGWEB_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] && [[ ! "${GRAYLOGWEB_HOST_NAME}" =~ ^localhost$ ]]
+    do
+      echo -e "\nType IP address or hostname of GRAYLOG web gui, followed by [ENTER]"
+      echo -e "Default to [${SETCOLOR_INFO}127.0.0.1${SETCOLOR_NORMAL}]:"
+      echo -en "> "
+      read GRAYLOGWEB_HOST_NAME
+      if [ -z "${GRAYLOGWEB_HOST_NAME}" ]
+      then
+        GRAYLOGWEB_HOST_NAME='127.0.0.1'
+      fi
+    done
+  else
+    old_input_value=${GRAYLOGWEB_HOST_NAME}
+    yes_no_function "Can you confirm you want to modify current IP address or hostname of GRAYLOG web gui ?" "yes"
+    if [ "${?}" == "0" ]
+    then
+      GRAYLOGWEB_HOST_NAME=
+      while [[ ! "${GRAYLOGWEB_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${GRAYLOGWEB_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] && [[ ! "${GRAYLOGWEB_HOST_NAME}" =~ ^localhost$ ]]
+      do
+        echo -e "\nType IP address or hostname of GRAYLOG web gui, followed by [ENTER]"
+        echo -e "Default to [${SETCOLOR_WARNING}${old_input_value}${SETCOLOR_NORMAL}]:"
+        echo -en "> "
+        read GRAYLOGWEB_HOST_NAME
+        if [ -z "${GRAYLOGWEB_HOST_NAME}" ]
+        then
+          GRAYLOGWEB_HOST_NAME=${old_input_value}
+        fi
+      done
+    else
+      GRAYLOGWEB_HOST_NAME=${old_input_value}
+    fi
+  fi
+  echo "GRAYLOGWEB_HOST_NAME='${GRAYLOGWEB_HOST_NAME}'" >> ${installation_cfg_tmpfile}
+  if [ -z "${GRAYLOGWEB_PORT_NUMBER}" ]
+  then
+    while [[ ! "${GRAYLOGWEB_PORT_NUMBER}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+    do
+      echo -e "\nType GRAYLOG web gui port number (possible values : ${SETCOLOR_FAILURE}1024${SETCOLOR_NORMAL} to ${SETCOLOR_FAILURE}63355${SETCOLOR_NORMAL}), followed by [ENTER]"
+      echo -e "Default to [${SETCOLOR_INFO}9000${SETCOLOR_NORMAL}]:"
+      echo -en "> "
+      read GRAYLOGWEB_PORT_NUMBER
+      if [ -z "${GRAYLOGWEB_PORT_NUMBER}" ]
+      then
+        GRAYLOGWEB_PORT_NUMBER='9000'
+      fi
+    done
+  else
+    old_input_value=${GRAYLOGWEB_PORT_NUMBER}
+    yes_no_function "Can you confirm you want to modify current port number of GRAYLOG web gui ?" "yes"
+    if [ "${?}" == "0" ]
+    then
+      GRAYLOGWEB_PORT_NUMBER=
+      while [[ ! "${GRAYLOGWEB_PORT_NUMBER}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+      do
+        echo -e "\nType GRAYLOG web gui port number (possible values : ${SETCOLOR_FAILURE}1024${SETCOLOR_NORMAL} to ${SETCOLOR_FAILURE}63355${SETCOLOR_NORMAL}), followed by [ENTER]"
+        echo -e "Default to [${SETCOLOR_WARNING}${old_input_value}${SETCOLOR_NORMAL}]:"
+        echo -en "> "
+        read GRAYLOGWEB_PORT_NUMBER
+        if [ -z "${GRAYLOGWEB_PORT_NUMBER}" ]
+        then
+          GRAYLOGWEB_PORT_NUMBER=${old_input_value}
+        fi
+      done
+    else
+      GRAYLOGWEB_PORT_NUMBER=${old_input_value}
+    fi
+  fi
+  echo "GRAYLOGWEB_PORT_NUMBER='${GRAYLOGWEB_PORT_NUMBER}'" >> ${installation_cfg_tmpfile}
   if [ -z "${BOOLEAN_GRAYLOG_SMTP}" ]
   then
     yes_no_function "Do you want to use Simple Mail Transport Protocol (SMTP) for Graylog application ?" "yes"
@@ -1146,7 +1295,7 @@ function set_globalvariables() {
   then
     if [ -z "${SMTP_HOST_NAME}" ]
     then
-      while [[ ! "${SMTP_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${SMTP_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]]
+      while [[ ! "${SMTP_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${SMTP_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] && [[ ! "${SMTP_HOST_NAME}" =~ ^localhost$ ]]
       do
         echo -e "\nType FQDN of SMTP server, followed by [ENTER]"
         echo -e "Default to [${SETCOLOR_INFO}mail.example.com${SETCOLOR_NORMAL}]:"
@@ -1163,7 +1312,7 @@ function set_globalvariables() {
       if [ "${?}" == "0" ]
       then
         SMTP_HOST_NAME=
-        while [[ ! "${SMTP_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${SMTP_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]]
+        while [[ ! "${SMTP_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && [[ ! "${SMTP_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] && [[ ! "${SMTP_HOST_NAME}" =~ ^localhost$ ]]
         do
           echo -e "\nType FQDN of SMTP server, followed by [ENTER]"
           echo -e "Default to [${SETCOLOR_WARNING}${old_input_value}${SETCOLOR_NORMAL}]:"
@@ -1492,7 +1641,7 @@ function set_globalvariables() {
   echo "BOOLEAN_GRAYLOGWEBGUI_ONSTARTUP='${BOOLEAN_GRAYLOGWEBGUI_ONSTARTUP}'" >> ${installation_cfg_tmpfile}
   if [ -z "${BOOLEAN_NGINX_ONSTARTUP}" ]
   then
-    yes_no_function "Do you want to add Nginx web server on startup ?" "yes"
+    yes_no_function "Do you want to add NGINX web server on startup ?" "yes"
     if [ "${?}" == "0" ]
     then
       BOOLEAN_NGINX_ONSTARTUP="true"
@@ -1502,7 +1651,7 @@ function set_globalvariables() {
   else
     if [[ "${BOOLEAN_NGINX_ONSTARTUP}" =~ true ]]
     then
-      yes_no_function "Can you confirm you want to ${SETCOLOR_FAILURE}disable${SETCOLOR_NORMAL} Nginx web server on startup ?" "yes"
+      yes_no_function "Can you confirm you want to ${SETCOLOR_FAILURE}disable${SETCOLOR_NORMAL} NGINX web server on startup ?" "yes"
       if [ "${?}" == "0" ]
       then
         BOOLEAN_NGINX_ONSTARTUP="false"
@@ -1510,7 +1659,7 @@ function set_globalvariables() {
         BOOLEAN_NGINX_ONSTARTUP=${BOOLEAN_NGINX_ONSTARTUP}
       fi
     else
-      yes_no_function "Can you confirm you want to ${SETCOLOR_SUCCESS}enable${SETCOLOR_NORMAL} Nginx web server on startup ?" "yes"
+      yes_no_function "Can you confirm you want to ${SETCOLOR_SUCCESS}enable${SETCOLOR_NORMAL} NGINX web server on startup ?" "yes"
       if [ "${?}" == "0" ]
       then
         BOOLEAN_NGINX_ONSTARTUP="true"
@@ -1520,6 +1669,106 @@ function set_globalvariables() {
     fi
   fi
   echo "BOOLEAN_NGINX_ONSTARTUP='${BOOLEAN_NGINX_ONSTARTUP}'" >> ${installation_cfg_tmpfile}
+  if [ -z "${BOOLEAN_IPTABLES_ONSTARTUP}" ]
+  then
+    yes_no_function "Do you want to add IPTABLES firewall on startup ?" "yes"
+    if [ "${?}" == "0" ]
+    then
+      BOOLEAN_IPTABLES_ONSTARTUP="true"
+    else
+      BOOLEAN_IPTABLES_ONSTARTUP="false"
+    fi
+  else
+    if [[ "${BOOLEAN_IPTABLES_ONSTARTUP}" =~ true ]]
+    then
+      yes_no_function "Can you confirm you want to ${SETCOLOR_FAILURE}disable${SETCOLOR_NORMAL} IPTABLES firewall on startup ?" "yes"
+      if [ "${?}" == "0" ]
+      then
+        BOOLEAN_IPTABLES_ONSTARTUP="false"
+      else
+        BOOLEAN_IPTABLES_ONSTARTUP=${BOOLEAN_IPTABLES_ONSTARTUP}
+      fi
+    else
+      yes_no_function "Can you confirm you want to ${SETCOLOR_SUCCESS}enable${SETCOLOR_NORMAL} IPTABLES firewall on startup ?" "yes"
+      if [ "${?}" == "0" ]
+      then
+        BOOLEAN_IPTABLES_ONSTARTUP="true"
+      else
+        BOOLEAN_IPTABLES_ONSTARTUP=${BOOLEAN_IPTABLES_ONSTARTUP}
+      fi
+    fi
+  fi
+  echo "BOOLEAN_IPTABLES_ONSTARTUP='${BOOLEAN_IPTABLES_ONSTARTUP}'" >> ${installation_cfg_tmpfile}
+  if [ -z "${CUSTOM_SYSLOG_PORT}" ]
+  then
+    while [[ ! "${CUSTOM_SYSLOG_PORT}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+    do
+      echo -e "\nType custom SYSLOG port number (possible values : ${SETCOLOR_FAILURE}1024${SETCOLOR_NORMAL} to ${SETCOLOR_FAILURE}63355${SETCOLOR_NORMAL}), followed by [ENTER]"
+      echo -e "Default to [${SETCOLOR_INFO}5514${SETCOLOR_NORMAL}]:"
+      echo -en "> "
+      read CUSTOM_SYSLOG_PORT
+      if [ -z "${CUSTOM_SYSLOG_PORT}" ]
+      then
+        CUSTOM_SYSLOG_PORT='5514'
+      fi
+    done
+  else
+    old_input_value=${CUSTOM_SYSLOG_PORT}
+    yes_no_function "Can you confirm you want to modify current custom SYSLOG port number ?" "yes"
+    if [ "${?}" == "0" ]
+    then
+      CUSTOM_SYSLOG_PORT=
+      while [[ ! "${CUSTOM_SYSLOG_PORT}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+      do
+        echo -e "\nType custom SYSLOG port number (possible values : ${SETCOLOR_FAILURE}1024${SETCOLOR_NORMAL} to ${SETCOLOR_FAILURE}63355${SETCOLOR_NORMAL}), followed by [ENTER]"
+        echo -e "Default to [${SETCOLOR_WARNING}${old_input_value}${SETCOLOR_NORMAL}]:"
+        echo -en "> "
+        read CUSTOM_SYSLOG_PORT
+        if [ -z "${CUSTOM_SYSLOG_PORT}" ]
+        then
+          CUSTOM_SYSLOG_PORT=${old_input_value}
+        fi
+      done
+    else
+      CUSTOM_SYSLOG_PORT=${old_input_value}
+    fi
+  fi
+  echo "CUSTOM_SYSLOG_PORT='${CUSTOM_SYSLOG_PORT}'" >> ${installation_cfg_tmpfile}
+  if [ -z "${CUSTOM_SNMPTRAP_PORT}" ]
+  then
+    while [[ ! "${CUSTOM_SNMPTRAP_PORT}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+    do
+      echo -e "\nType custom SNMPTRAP port number (possible values : ${SETCOLOR_FAILURE}1024${SETCOLOR_NORMAL} to ${SETCOLOR_FAILURE}63355${SETCOLOR_NORMAL}), followed by [ENTER]"
+      echo -e "Default to [${SETCOLOR_INFO}1162${SETCOLOR_NORMAL}]:"
+      echo -en "> "
+      read CUSTOM_SNMPTRAP_PORT
+      if [ -z "${CUSTOM_SNMPTRAP_PORT}" ]
+      then
+        CUSTOM_SNMPTRAP_PORT='1162'
+      fi
+    done
+  else
+    old_input_value=${CUSTOM_SNMPTRAP_PORT}
+    yes_no_function "Can you confirm you want to modify current custom SNMPTRAP port number ?" "yes"
+    if [ "${?}" == "0" ]
+    then
+      CUSTOM_SNMPTRAP_PORT=
+      while [[ ! "${CUSTOM_SNMPTRAP_PORT}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+      do
+        echo -e "\nType custom SNMPTRAP port number (possible values : ${SETCOLOR_FAILURE}1024${SETCOLOR_NORMAL} to ${SETCOLOR_FAILURE}63355${SETCOLOR_NORMAL}), followed by [ENTER]"
+        echo -e "Default to [${SETCOLOR_WARNING}${old_input_value}${SETCOLOR_NORMAL}]:"
+        echo -en "> "
+        read CUSTOM_SNMPTRAP_PORT
+        if [ -z "${CUSTOM_SNMPTRAP_PORT}" ]
+        then
+          CUSTOM_SNMPTRAP_PORT=${old_input_value}
+        fi
+      done
+    else
+      CUSTOM_SNMPTRAP_PORT=${old_input_value}
+    fi
+  fi
+  echo "CUSTOM_SNMPTRAP_PORT='${CUSTOM_SNMPTRAP_PORT}'" >> ${installation_cfg_tmpfile}
   INSTALLATION_CFG_FILE=${installation_cfg_tmpfile}
   verify_globalvariables
 }
@@ -1577,7 +1826,7 @@ function verify_globalvariables() {
   fi
   if [[ "${BOOLEAN_NTP_CONFIGURE}" =~ true ]]
   then
-    if [[ "${NEW_NTP_ADDRESS}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] || [[ "${NEW_NTP_ADDRESS}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]]
+    if [[ "${NEW_NTP_ADDRESS}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] || [[ "${NEW_NTP_ADDRESS}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] || [[ "${NEW_NTP_ADDRESS}" =~ ^localhost$ ]]
     then
       echo -e "# ${SETCOLOR_SUCCESS}NEW_NTP_ADDRESS${SETCOLOR_NORMAL}.....................'${NEW_NTP_ADDRESS}'${MOVE_TO_COL1}#"
     else
@@ -1595,6 +1844,22 @@ function verify_globalvariables() {
     ((error_counter++))
     log "ERROR" "Global variables: BOOLEAN_NTP_ONSTARTUP not successfully definied by user (value=${BOOLEAN_NTP_ONSTARTUP})"
     echo -e "# ${SETCOLOR_FAILURE}BOOLEAN_NTP_ONSTARTUP${SETCOLOR_NORMAL}...............'${BOOLEAN_NTP_ONSTARTUP}'${MOVE_TO_COL1}#"
+  fi
+  if [[ "${MONGO_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] || [[ "${MONGO_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] || [[ "${MONGO_HOST_NAME}" =~ ^localhost$ ]]
+  then
+    echo -e "# ${SETCOLOR_SUCCESS}MONGO_HOST_NAME${SETCOLOR_NORMAL}.....................'${MONGO_HOST_NAME}'${MOVE_TO_COL1}#"
+  else
+    ((error_counter++))
+    log "ERROR" "Global variables: MONGO_HOST_NAME not successfully definied by user (value=${MONGO_HOST_NAME})"
+    echo -e "# ${SETCOLOR_FAILURE}MONGO_HOST_NAME${SETCOLOR_NORMAL}.....................'${MONGO_HOST_NAME}'${MOVE_TO_COL1}#"
+  fi
+  if [[ "${MONGO_PORT_NUMBER}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+  then
+    echo -e "# ${SETCOLOR_SUCCESS}MONGO_PORT_NUMBER${SETCOLOR_NORMAL}...................'${MONGO_PORT_NUMBER}'${MOVE_TO_COL1}#"
+  else
+    ((error_counter++))
+    log "ERROR" "Global variables: MONGO_PORT_NUMBER not successfully definied by user (value=${MONGO_PORT_NUMBER})"
+    echo -e "# ${SETCOLOR_FAILURE}MONGO_PORT_NUMBER${SETCOLOR_NORMAL}...................'${MONGO_PORT_NUMBER}'${MOVE_TO_COL1}#"
   fi
   if [ ! -z "${MONGO_ADMIN_PASSWORD}" ]
   then
@@ -1740,6 +2005,22 @@ function verify_globalvariables() {
     log "ERROR" "Global variables: GRAYLOG_ADMIN_PASSWORD not successfully definied by user (value=${GRAYLOG_ADMIN_PASSWORD})"
     echo -e "# ${SETCOLOR_FAILURE}GRAYLOG_ADMIN_PASSWORD${SETCOLOR_NORMAL}..............'${GRAYLOG_ADMIN_PASSWORD}'${MOVE_TO_COL1}#"
   fi
+  if [[ "${GRAYLOGWEB_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] || [[ "${GRAYLOGWEB_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] || [[ "${GRAYLOGWEB_HOST_NAME}" =~ ^localhost$ ]]
+  then
+    echo -e "# ${SETCOLOR_SUCCESS}GRAYLOGWEB_HOST_NAME${SETCOLOR_NORMAL}................'${GRAYLOGWEB_HOST_NAME}'${MOVE_TO_COL1}#"
+  else
+    ((error_counter++))
+    log "ERROR" "Global variables: GRAYLOGWEB_HOST_NAME not successfully definied by user (value=${GRAYLOGWEB_HOST_NAME})"
+    echo -e "# ${SETCOLOR_FAILURE}GRAYLOGWEB_HOST_NAME${SETCOLOR_NORMAL}................'${GRAYLOGWEB_HOST_NAME}'${MOVE_TO_COL1}#"
+  fi
+  if [[ "${GRAYLOGWEB_PORT_NUMBER}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+  then
+    echo -e "# ${SETCOLOR_SUCCESS}GRAYLOGWEB_PORT_NUMBER${SETCOLOR_NORMAL}..............'${GRAYLOGWEB_PORT_NUMBER}'${MOVE_TO_COL1}#"
+  else
+    ((error_counter++))
+    log "ERROR" "Global variables: GRAYLOGWEB_PORT_NUMBER not successfully definied by user (value=${GRAYLOGWEB_PORT_NUMBER})"
+    echo -e "# ${SETCOLOR_FAILURE}GRAYLOGWEB_PORT_NUMBER${SETCOLOR_NORMAL}..............'${GRAYLOGWEB_PORT_NUMBER}'${MOVE_TO_COL1}#"
+  fi
   if [[ "${BOOLEAN_GRAYLOGSERVER_ONSTARTUP}" =~ true|false ]]
   then
     echo -e "# ${SETCOLOR_SUCCESS}BOOLEAN_GRAYLOGSERVER_ONSTARTUP${SETCOLOR_NORMAL}.....'${BOOLEAN_GRAYLOGSERVER_ONSTARTUP}'${MOVE_TO_COL1}#"
@@ -1766,7 +2047,7 @@ function verify_globalvariables() {
   fi
   if [[ "${BOOLEAN_GRAYLOG_SMTP}" =~ true ]]
   then
-    if [[ "${SMTP_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] || [[ "${SMTP_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]]
+    if [[ "${SMTP_HOST_NAME}" =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] || [[ "${SMTP_HOST_NAME}" =~ ^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)*[a-zA-Z0-9](-?[a-zA-Z0-9])+\.[a-zA-Z]{2,}$ ]] || [[ "${SMTP_HOST_NAME}" =~ ^localhost$ ]]
     then
       echo -e "# ${SETCOLOR_SUCCESS}SMTP_HOST_NAME${SETCOLOR_NORMAL}......................'${SMTP_HOST_NAME}'${MOVE_TO_COL1}#"
     else
@@ -1868,7 +2149,6 @@ function verify_globalvariables() {
   else
     echo -e "# ${SETCOLOR_DISABLE}SMTP_AUTH_PASSWORD${SETCOLOR_NORMAL}..................'${SMTP_AUTH_PASSWORD}'${MOVE_TO_COL1}#"
   fi
-  
   if [[ "${BOOLEAN_NGINX_ONSTARTUP}" =~ true|false ]]
   then
     echo -e "# ${SETCOLOR_SUCCESS}BOOLEAN_NGINX_ONSTARTUP${SETCOLOR_NORMAL}.............'${BOOLEAN_NGINX_ONSTARTUP}'${MOVE_TO_COL1}#"
@@ -1876,6 +2156,30 @@ function verify_globalvariables() {
     ((error_counter++))
     log "ERROR" "Global variables: BOOLEAN_NGINX_ONSTARTUP not successfully definied by user (value=${BOOLEAN_NGINX_ONSTARTUP})"
     echo -e "# ${SETCOLOR_FAILURE}BOOLEAN_NGINX_ONSTARTUP${SETCOLOR_NORMAL}.............'${BOOLEAN_NGINX_ONSTARTUP}'${MOVE_TO_COL1}#"
+  fi
+  if [[ "${BOOLEAN_IPTABLES_ONSTARTUP}" =~ true|false ]]
+  then
+    echo -e "# ${SETCOLOR_SUCCESS}BOOLEAN_IPTABLES_ONSTARTUP${SETCOLOR_NORMAL}..........'${BOOLEAN_IPTABLES_ONSTARTUP}'${MOVE_TO_COL1}#"
+  else
+    ((error_counter++))
+    log "ERROR" "Global variables: BOOLEAN_IPTABLES_ONSTARTUP not successfully definied by user (value=${BOOLEAN_IPTABLES_ONSTARTUP})"
+    echo -e "# ${SETCOLOR_FAILURE}BOOLEAN_IPTABLES_ONSTARTUP${SETCOLOR_NORMAL}..........'${BOOLEAN_IPTABLES_ONSTARTUP}'${MOVE_TO_COL1}#"
+  fi
+  if [[ "${CUSTOM_SYSLOG_PORT}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+  then
+    echo -e "# ${SETCOLOR_SUCCESS}CUSTOM_SYSLOG_PORT${SETCOLOR_NORMAL}..................'${CUSTOM_SYSLOG_PORT}'${MOVE_TO_COL1}#"
+  else
+    ((error_counter++))
+    log "ERROR" "Global variables: CUSTOM_SYSLOG_PORT not successfully definied by user (value=${CUSTOM_SYSLOG_PORT})"
+    echo -e "# ${SETCOLOR_FAILURE}CUSTOM_SYSLOG_PORT${SETCOLOR_NORMAL}..................'${CUSTOM_SYSLOG_PORT}'${MOVE_TO_COL1}#"
+  fi
+  if [[ "${CUSTOM_SNMPTRAP_PORT}" =~ (102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]) ]]
+  then
+    echo -e "# ${SETCOLOR_SUCCESS}CUSTOM_SNMPTRAP_PORT${SETCOLOR_NORMAL}................'${CUSTOM_SNMPTRAP_PORT}'${MOVE_TO_COL1}#"
+  else
+    ((error_counter++))
+    log "ERROR" "Global variables: CUSTOM_SNMPTRAP_PORT not successfully definied by user (value=${CUSTOM_SNMPTRAP_PORT})"
+    echo -e "# ${SETCOLOR_FAILURE}CUSTOM_SNMPTRAP_PORT${SETCOLOR_NORMAL}................'${CUSTOM_SNMPTRAP_PORT}'${MOVE_TO_COL1}#"
   fi
   echo -e "#${MOVE_TO_COL1}#"
   echo -e "###################################################################"
@@ -1895,6 +2199,8 @@ function verify_globalvariables() {
         log "INFO" "Global variables: NEW_NTP_ADDRESS successfully definied by user (value=${NEW_NTP_ADDRESS})"
         log "INFO" "Global variables: BOOLEAN_RSA_AUTH successfully definied by user (value=${BOOLEAN_RSA_AUTH})"
         log "INFO" "Global variables: RSA_PUBLIC_KEY successfully definied by user (value=${RSA_PUBLIC_KEY})"
+		log "INFO" "Global variables: MONGO_HOST_NAME successfully definied by user (value=${MONGO_HOST_NAME})"
+        log "INFO" "Global variables: MONGO_PORT_NUMBER successfully definied by user (value=${MONGO_PORT_NUMBER})"
         log "INFO" "Global variables: MONGO_ADMIN_PASSWORD successfully definied by user (value=${MONGO_ADMIN_PASSWORD})"
         log "INFO" "Global variables: MONGO_GRAYLOG_DATABASE successfully definied by user (value=${MONGO_GRAYLOG_DATABASE})"
         log "INFO" "Global variables: MONGO_GRAYLOG_USER successfully definied by user (value=${MONGO_GRAYLOG_USER})"
@@ -1913,6 +2219,8 @@ function verify_globalvariables() {
         log "INFO" "Global variables: GRAYLOG_SECRET_PASSWORD successfully definied by user (value=${GRAYLOG_SECRET_PASSWORD})"
         log "INFO" "Global variables: GRAYLOG_ADMIN_USERNAME successfully definied by user (value=${GRAYLOG_ADMIN_USERNAME})"
         log "INFO" "Global variables: GRAYLOG_ADMIN_PASSWORD successfully definied by user (value=${GRAYLOG_ADMIN_PASSWORD})"
+        log "INFO" "Global variables: GRAYLOGWEB_HOST_NAME successfully definied by user (value=${GRAYLOGWEB_HOST_NAME})"
+        log "INFO" "Global variables: GRAYLOGWEB_PORT_NUMBER successfully definied by user (value=${GRAYLOGWEB_PORT_NUMBER})"
         log "INFO" "Global variables: BOOLEAN_GRAYLOG_SMTP successfully definied by user (value=${BOOLEAN_GRAYLOG_SMTP})"
         log "INFO" "Global variables: SMTP_HOST_NAME successfully definied by user (value=${SMTP_HOST_NAME})"
         log "INFO" "Global variables: SMTP_DOMAIN_NAME successfully definied by user (value=${SMTP_DOMAIN_NAME})"
@@ -1925,6 +2233,9 @@ function verify_globalvariables() {
         log "INFO" "Global variables: BOOLEAN_GRAYLOGSERVER_ONSTARTUP successfully definied by user (value=${BOOLEAN_GRAYLOGSERVER_ONSTARTUP})"
         log "INFO" "Global variables: BOOLEAN_GRAYLOGWEBGUI_ONSTARTUP successfully definied by user (value=${BOOLEAN_GRAYLOGWEBGUI_ONSTARTUP})"
         log "INFO" "Global variables: BOOLEAN_NGINX_ONSTARTUP successfully definied by user (value=${BOOLEAN_NGINX_ONSTARTUP})"
+        log "INFO" "Global variables: BOOLEAN_IPTABLES_ONSTARTUP successfully definied by user (value=${BOOLEAN_IPTABLES_ONSTARTUP})"
+        log "INFO" "Global variables: CUSTOM_SYSLOG_PORT successfully definied by user (value=${CUSTOM_SYSLOG_PORT})"
+        log "INFO" "Global variables: CUSTOM_SNMPTRAP_PORT successfully definied by user (value=${CUSTOM_SNMPTRAP_PORT})"
       else
         log "WARN" "Global variables: Not confirmed by user"
         yes_no_function "Do you want to define them again ?" "yes"
@@ -1997,15 +2308,15 @@ function get_sysinfo() {
     log "INFO" "System informations: OS name=CentOS"
     os_major_version=`sed -rn 's/.*\s.*\s.*([0-9])\.[0-9].*/\1/p' ${centos_release_file}`
     os_minor_version=`sed -rn 's/.*\s.*\s.*[0-9]\.([0-9]).*/\1/p' ${centos_release_file}`
-    if [ "${os_major_version}" == "6" ] && [[ "${os_minor_version}" =~ [5-6] ]]
+    if [ "${os_major_version}" == "6" ] && [[ "${os_minor_version}" =~ [5-7] ]]
     then
       log "INFO" "System informations: OS major version=${os_major_version}"
       log "INFO" "System informations: OS minor version=${os_minor_version}"
-    elif [ "${os_major_version}" != "6" ] && [[ "${os_minor_version}" =~ [5-6] ]]
+    elif [ "${os_major_version}" != "6" ] && [[ "${os_minor_version}" =~ [5-7] ]]
     then
       ((error_counter++))
       log "ERROR" "System informations: OS major version=${os_major_version}"
-    elif [ "${os_major_version}" == "6" ] && [[ ! "${os_minor_version}" =~ [5-6] ]]
+    elif [ "${os_major_version}" == "6" ] && [[ ! "${os_minor_version}" =~ [5-7] ]]
     then
       ((error_counter++))
       log "ERROR" "System informations: OS minor version=${os_minor_version}"
@@ -2116,7 +2427,7 @@ function generate_sslkeys() {
     abort_installation
   fi
 }
-# Configure Yum repositories (EPEL, ElasticSearch, Nginx, Graylog)
+# Configure Yum repositories (EPEL, ElasticSearch, NGINX, Graylog)
 function configure_yum() {
   local error_counter=0
   local warning_counter=0
@@ -2128,9 +2439,9 @@ function configure_yum() {
   local nginx_key_url="http://nginx.org/packages/keys/nginx_signing.key"
   local nginx_repo_file="/etc/yum.repos.d/nginx.repo"
   local mongodb_repo_file="/etc/yum.repos.d/mongodb.repo"
-  local elasticsearch_key_url="https://packages.elasticsearch.org/GPG-KEY-elasticsearch"
+  local elasticsearch_key_url="https://packages.elastic.co/GPG-KEY-elasticsearch"
   local elasticsearch_repo_file="/etc/yum.repos.d/elasticsearch.repo"
-  local graylog_rpm_url="https://packages.graylog2.org/repo/packages/graylog-1.0-repository-el6_latest.rpm"
+  local graylog_rpm_url="https://packages.graylog2.org/repo/packages/graylog-1.2-repository-el6_latest.rpm"
   local graylog_repo_file="/etc/yum.repos.d/graylog.repo"
   echo_message "Configure YUM repositories"
   command_output_message=$(test_file ${epel_repo_file})
@@ -2161,17 +2472,6 @@ function configure_yum() {
     if [ -z "${command_output_message}" ]
     then
       log "INFO" "YUM repositories: NGINX repository successfully installed"
-      command_output_message=$(sed -i \
-      -e "s/\(baseurl=http:\/\/nginx\.org\/packages\)\(\/centos\/6\/\$basearch\/\)/\1\/mainline\2/" \
-      ${nginx_repo_file} 2>&1 >/dev/null)
-      if [ -z "${command_output_message}" ]
-      then
-        log "INFO" "YUM repositories: NGINX repository successfully configured"
-      else
-        ((error_counter++))
-        log "ERROR" "YUM repositories: NGINX repository not configured"
-        log "DEBUG" "YUM repositories: ${command_output_message}"
-      fi
     else
       ((error_counter++))
       log "ERROR" "YUM repositories: NGINX repository not installed"
@@ -2185,9 +2485,9 @@ function configure_yum() {
     log "WARN" "YUM repositories: MONGO repository already installed"
   else
     command_output_message=$(cat << EOF > ${mongodb_repo_file}
-[mongodb-org-3.0]
+[mongodb-org]
 name=MongoDB Repository
-baseurl=http://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/3.0/x86_64/
+baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/stable/\$basearch/
 gpgcheck=0
 enabled=1
 EOF
@@ -2209,11 +2509,11 @@ EOF
   else
     rpm --import ${elasticsearch_key_url}
     command_output_message=$(cat << EOF > /etc/yum.repos.d/elasticsearch.repo
-[elasticsearch-1.5]
-name=Elasticsearch repository for 1.5.x packages
-baseurl=http://packages.elasticsearch.org/elasticsearch/1.5/centos
+[elasticsearch-1.7]
+name=Elasticsearch repository for 1.7.x packages
+baseurl=http://packages.elastic.co/elasticsearch/1.7/centos
 gpgcheck=1
-gpgkey=http://packages.elasticsearch.org/GPG-KEY-elasticsearch
+gpgkey=http://packages.elastic.co/GPG-KEY-elasticsearch
 enabled=1
 EOF
 2>&1 >/dev/null)
@@ -2527,12 +2827,24 @@ function install_networkpackages() {
     ((installed_counter++))
     log "WARN" "Network packages: system-config-firewall-tui already installed"
   fi
-  if [ "${installed_counter}" == "7" ]
+  command_output_message=$(yum list installed | grep -w net-snmp)
+  if [[ "${command_output_message}" =~ ^net-snmp\..* ]]
+  then
+    ((installed_counter++))
+    log "WARN" "Network packages: net-snmp already installed"
+  fi
+  command_output_message=$(yum list installed | grep -w net-snmp-utils)
+  if [[ "${command_output_message}" =~ ^net-snmp-utils\..* ]]
+  then
+    ((installed_counter++))
+    log "WARN" "Network packages: net-snmp-utils already installed"
+  fi
+  if [ "${installed_counter}" == "9" ]
   then
     log "WARN" "Network packages: Already installed"
     echo_passed "PASS"
   else
-    command_output_message=$(yum -y install wget tcpdump traceroute bind-utils telnet openssh-clients system-config-firewall 2>&1 >/dev/null)
+    command_output_message=$(yum -y install wget tcpdump traceroute bind-utils telnet openssh-clients system-config-firewall net-snmp net-snmp-utils 2>&1 >/dev/null)
     if [ -z "${command_output_message}" ] || [[ ${command_output_message} =~ [Ww]arning.* ]]
     then
       log "INFO" "Network packages: Successfully installed"
@@ -2917,12 +3229,12 @@ function install_mongodb() {
       echo_failure "FAILED"
       abort_installation
     fi
-    command_output_message=$(mongo --eval "db.getSiblingDB('${MONGODB_ADMIN_DATABASE}').createUser({user: '${MONGO_ADMIN_USER}', pwd: '${MONGO_ADMIN_PASSWORD}', roles: [ { role: 'root', db: '${MONGODB_ADMIN_DATABASE}' } ]})")
+    command_output_message=$(mongo --eval "db.getSiblingDB('${MONGO_ADMIN_DATABASE}').createUser({user: '${MONGO_ADMIN_USER}', pwd: '${MONGO_ADMIN_PASSWORD}', roles: [ { role: 'root', db: '${MONGO_ADMIN_DATABASE}' } ]})")
     success_word_occurrence=$(( (`cat <<<${command_output_message} | wc -c` - `sed "s/${success_word_definition}//g" <<<${command_output_message} | wc -c`) / ${#success_word_definition} ))
     if [ "${success_word_occurrence}" == "1" ]
     then
       log "INFO" "MONGO database server: Successfully set password (${MONGO_ADMIN_PASSWORD}) for user ${MONGO_ADMIN_USER}"
-      log "INFO" "MONGO database server: Successfully set role 'root' to user ${MONGO_ADMIN_USER} on database ${MONGODB_ADMIN_DATABASE}"
+      log "INFO" "MONGO database server: Successfully set role 'root' to user ${MONGO_ADMIN_USER} on database ${MONGO_ADMIN_DATABASE}"
     else
       log "ERROR" "MONGO database server: CLI configuration not completed"
       log "DEBUG" "MONGO database server: ${command_output_message}"
@@ -2996,7 +3308,7 @@ function install_mongodb() {
       if [ -z "${command_output_message}" ]
       then
         log "INFO" "MONGO database server: Disabled on startup"
-        echo_passed "OK"
+        echo_success "OK"
       else
         log "ERROR" "MONGO database server: Not disabled on startup"
         log "DEBUG" "MONGO database server: ${command_output_message}"
@@ -3114,8 +3426,8 @@ function install_elasticsearch() {
     echo_passed "PASS"
   else
     command_output_message=$(sed -i.dist \
-    -e "s/#\(cluster.name: \).*/\1log-cluster/" \
-    -e "s/#\(node.name: \).*/\1${SERVER_SHORT_NAME}-elasticsearch/" \
+    -e "s/#\(cluster.name: \).*/\1GRAYLOG-PRODUCTION/" \
+    -e "s/#\(node.name: \).*/\1NODE-ELASTICSEARCH/" \
     -e "0,/#\(node.master: true\)/s//\1/" \
     -e "0,/#\(node.data: true\)/s//\1/" \
     -e "s/#\(network.host: \).*/\1${SERVER_IP_ADDRESS}/" \
@@ -3123,7 +3435,7 @@ function install_elasticsearch() {
     -e "s/#\(http.port: 9200\)/\1/" \
     -e "s/#\(http.enabled: \)false/\1true/" \
     -e "s/#\(discovery.zen.ping.multicast.enabled: false\)/\1/" \
-    -e "s/#\(discovery.zen.ping.unicast.hosts: \).*/\1\[\"${SERVER_HOST_NAME}\"\]/" \
+    -e "s/#\(discovery.zen.ping.unicast.hosts: \).*/\1\[\"${SERVER_HOST_NAME}:9300\"\]/" \
     -e "s/\(\#http.jsonp.enable: true\)/\1\nscript.disable_dynamic: true\nbootstrap.mlockall: true/" \
     ${elasticsearch_config_file} 2>&1 >/dev/null)
     if [ -z "${command_output_message}" ]
@@ -3138,7 +3450,9 @@ function install_elasticsearch() {
     -e "s/#\(ES_HEAP_SIZE\=\).*/\1${ELASTICSEARCH_RAM_RESERVATION}/" \
     -e "s/#\(ES_DIRECT_SIZE\=\).*/\1${ELASTICSEARCH_RAM_RESERVATION}/" \
     -e "s/#\(ES_JAVA_OPTS\=\).*/\1\"\-Djava.net.preferIPv4Stack\=true\"/" \
+	-e "s/#\(MAX_OPEN_FILES\=\).*/\164000/" \
     -e "s/#\(MAX_LOCKED_MEMORY\=\).*/\1unlimited/" \
+	-e "s/#\(MAX_MAP_COUNT\=\).*/\1262144/" \
     ${elasticsearch_sysconfig_file} 2>&1 >/dev/null)
     if [ -z "${command_output_message}" ]
     then
@@ -3242,7 +3556,7 @@ function install_elasticsearch() {
       if [ -z "${command_output_message}" ]
       then
         log "INFO" "ELASTICSEARCH index server: Disabled on startup"
-        echo_passed "OK"
+        echo_success "OK"
       else
         log "ERROR" "ELASTICSEARCH index server: Not disabled on startup"
         log "DEBUG" "ELASTICSEARCH index server: ${command_output_message}"
@@ -3316,8 +3630,9 @@ function install_graylogserver() {
     -e "s/#\(rest_enable_tls = true\)/\1/" \
     -e "s|#\(rest_tls_cert_file = \).*|\1${PUBLIC_KEY_FILE}|" \
     -e "s|#\(rest_tls_key_file = \).*|\1${PRIVATE_KEY_FILE}|" \
-    -e "s/#\(elasticsearch_cluster_name = \).*/\1log-cluster/" \
-    -e "s/#\(elasticsearch_node_name = \).*/\1${SERVER_SHORT_NAME}-graylog/" \
+	-e "s/\(elasticsearch_index_prefix = \).*/\1graylog/" \
+    -e "s/#\(elasticsearch_cluster_name = \).*/\1GRAYLOG-PRODUCTION/" \
+    -e "s/#\(elasticsearch_node_name = \).*/\1NODE-${SERVER_SHORT_NAME}/" \
     -e "s/#\(elasticsearch_http_enabled = false\)/\1/" \
     -e "s/#\(elasticsearch_discovery_zen_ping_multicast_enabled = false\)/\1/" \
     -e "s/#\(elasticsearch_discovery_zen_ping_unicast_hosts = \).*/\1${SERVER_HOST_NAME}:9300/" \
@@ -3325,12 +3640,9 @@ function install_graylogserver() {
     -e "s/#\(elasticsearch_node_data = false\)/\1/" \
     -e "s/#\(elasticsearch_transport_tcp_port = 9350\)/\1/" \
     -e "s/#\(elasticsearch_http_enabled = false\)/\1/" \
-    -e "s/#\(elasticsearch_network_host = \).*/\1${SERVER_IP_ADDRESS}/" \
-    -e "s/\(mongodb_useauth = \).*/\1true/" \
-    -e "s/#\(mongodb_user = \).*/\1${MONGO_GRAYLOG_USER}/" \
-    -e "s/#\(mongodb_password = \).*/\1${MONGO_GRAYLOG_PASSWORD}/" \
-    -e "s/\(mongodb_host = \).*/\1localhost/" \
-    -e "s/\(mongodb_database = \).*/\1${MONGO_GRAYLOG_DATABASE}/" \
+    -e "s/#\(elasticsearch_network_host =\).*/\1 ${SERVER_IP_ADDRESS}/" \
+    -e "s|\(mongodb_uri = mongodb://localhost/graylog2\)|#\1|" \
+    -e "s/#\(mongodb_uri = mongodb:\/\/\).*\(:\).*\(@\).*\(:\)27017\(\/\)graylog2\$/\1${MONGO_GRAYLOG_USER}\2${MONGO_GRAYLOG_PASSWORD}\3${MONGO_HOST_NAME}\4${MONGO_PORT_NUMBER}\5${MONGO_GRAYLOG_DATABASE}/" \
     -e "s/#\(transport_email_enabled = \).*/\1${BOOLEAN_GRAYLOG_SMTP}/" \
     -e "s/#\(transport_email_hostname = \).*/\1${SMTP_HOST_NAME}/" \
     -e "s/#\(transport_email_port = \).*/\1${SMTP_PORT_NUMBER}/" \
@@ -3352,7 +3664,7 @@ function install_graylogserver() {
       log "DEBUG" "GRAYLOG back-end server: ${command_output_message}"
     fi
     command_output_message=$(sed -i.dist \
-    -e "s/\(GRAYLOG_SERVER_JAVA_OPTS=\"\).*\(\"\)/\1-Djava.net.preferIPv4Stack=true -Xms${GRAYLOGSERVER_RAM_RESERVATION} -Xmx${GRAYLOGSERVER_RAM_RESERVATION} -XX:NewRatio=1 -XX:PermSize=128m -XX:MaxPermSize=256m -server -XX:+ResizeTLAB -XX:+UseConcMarkSweepGC -XX:+CMSConcurrentMTEnabled -XX:+CMSClassUnloadingEnabled -XX:+UseParNewGC -XX:-OmitStackTraceInFastThrow\2/" \
+    -e "s/\(GRAYLOG_SERVER_JAVA_OPTS=\"\).*\(\"\)/\1-Djava.net.preferIPv4Stack=true -Xms${GRAYLOGSERVER_RAM_RESERVATION} -Xmx${GRAYLOGSERVER_RAM_RESERVATION} -XX:NewRatio=1 -server -XX:+ResizeTLAB -XX:+UseConcMarkSweepGC -XX:+CMSConcurrentMTEnabled -XX:+CMSClassUnloadingEnabled -XX:+UseParNewGC -XX:-OmitStackTraceInFastThrow\2/" \
     ${graylogserver_sysconfig_file} 2>&1 >/dev/null)
     if [ -z "${command_output_message}" ]
     then
@@ -3407,7 +3719,7 @@ function install_graylogserver() {
       if [ -z "${command_output_message}" ]
       then
         log "INFO" "GRAYLOG back-end server: Disabled on startup"
-        echo_passed "OK"
+        echo_success "OK"
       else
         log "ERROR" "GRAYLOG back-end server: Not disabled on startup"
         log "DEBUG" "GRAYLOG back-end server: ${command_output_message}"
@@ -3483,8 +3795,8 @@ function install_graylogwebgui() {
       log "DEBUG" "GRAYLOG front-end server: ${command_output_message}"
     fi
     command_output_message=$(sed -i.dist \
-    -e "s/\(GRAYLOG_WEB_HTTP_ADDRESS=\"\)0.0.0.0\(\"\)/\1localhost\2/" \
-    -e "s/\(GRAYLOG_WEB_JAVA_OPTS=\"\)\(\"\)/\1-Djava.net.preferIPv4Stack=true\2/" \
+    -e "s/\(GRAYLOG_WEB_HTTP_ADDRESS=\"\)0.0.0.0\(\"\)/\1${GRAYLOGWEB_HOST_NAME}\2/" \
+    -e "s/\(GRAYLOG_WEB_JAVA_OPTS=\"\)\(\"\)/\1-Djava.net.preferIPv4Stack=true -Dhttp.address=${GRAYLOGWEB_HOST_NAME} -Dhttp.port=${GRAYLOGWEB_PORT_NUMBER}\2/" \
     ${graylogwebgui_sysconfig_file} 2>&1 >/dev/null)
     if [ -z "${command_output_message}" ]
     then
@@ -3539,7 +3851,7 @@ function install_graylogwebgui() {
       if [ -z "${command_output_message}" ]
       then
         log "INFO" "GRAYLOG front-end server: Disabled on startup"
-        echo_passed "OK"
+        echo_success "OK"
       else
         log "ERROR" "GRAYLOG front-end server: Not disabled on startup"
         log "DEBUG" "GRAYLOG front-end server: ${command_output_message}"
@@ -3551,7 +3863,31 @@ function install_graylogwebgui() {
     fi
   fi
 }
-# Install Nginx web server as a proxy to communicate with GRAYLOG front-end server
+# Install and SNMP plugin for Graylog application
+function install_graylogsnmpplugin() {
+  local command_output_message=
+  local graylogsnmpplugin_rpm_url="https://github.com/Graylog2/graylog-plugin-snmp/releases/download/0.3.0/graylog-plugin-snmp-0.3.0-1.noarch.rpm"
+  echo_message "Install GRAYLOG SNMP plugin"
+  command_output_message=$(yum list installed | grep -w graylog-plugin-snmp)
+  if [[ "${command_output_message}" =~ ^graylog-plugin-snmp\..* ]]
+  then
+    log "WARN" "GRAYLOG SNMP plugin: Already installed"
+    echo_passed "PASS"
+  else
+    command_output_message=$(yum -y install ${graylogsnmpplugin_rpm_url} 2>&1 >/dev/null)
+    if [ -z "${command_output_message}" ] || [[ "${command_output_message}" =~ [Ww]arning.* ]]
+    then
+      log "INFO" "GRAYLOG SNMP plugin: Successfully installed"
+      echo_success "OK"
+    else
+      log "INFO" "GRAYLOG SNMP plugin: Not installed"
+      log "DEBUG" "GRAYLOG SNMP plugin: ${command_output_message}"
+      echo_failure "FAILED"
+      abort_installation
+    fi
+  fi
+}
+# Install NGINX web server as a proxy to communicate with GRAYLOG front-end server
 function install_nginx() {
   local installed_counter=0
   local error_counter=0
@@ -3634,7 +3970,7 @@ function install_nginx() {
     -e "s/\#.*\(ssl_prefer_server_ciphers\).*\(on;\)/\t\1\t\2/" \
     -e "s/\#.*\(location \/ {\)/\t\1/" \
     -e "s/\# .*\(\}\)/\t\1/" \
-    -e "s/\#.*root.*/\t\tproxy_pass http:\/\/localhost:9000\/;\n\t\tproxy_set_header Host \$host;\n\t\tproxy_set_header X-Real-IP \$remote_addr;\n\t\tproxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n\t\tproxy_connect_timeout 150;\n\t\tproxy_send_timeout 100;\n\t\tproxy_read_timeout 100;\n\t\tproxy_buffers 4 32k;\n\t\tclient_max_body_size 8m;\n\t\tclient_body_buffer_size 128k;/" \
+    -e "s/\#.*root.*/\t\tproxy_pass http:\/\/${GRAYLOGWEB_HOST_NAME}:${GRAYLOGWEB_PORT_NUMBER}\/;\n\t\tproxy_set_header Host \$host;\n\t\tproxy_set_header X-Real-IP \$remote_addr;\n\t\tproxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n\t\tproxy_connect_timeout 150;\n\t\tproxy_send_timeout 100;\n\t\tproxy_read_timeout 100;\n\t\tproxy_buffers 4 32k;\n\t\tclient_max_body_size 8m;\n\t\tclient_body_buffer_size 128k;/" \
     -e "s/\#\(\}\)/\1/" \
     -e '/\#.*index.*/d' \
     ${nginx_sslconfig_file} 2>&1 >/dev/null)
@@ -3664,7 +4000,7 @@ function install_nginx() {
       ((onstartup_counter++))
     fi
   done
-  if [[ "${BOOLEAN_GRAYLOGSERVER_ONSTARTUP}" =~ true ]]
+  if [[ "${BOOLEAN_NGINX_ONSTARTUP}" =~ true ]]
   then
     echo_message "Enable NGINX web server on startup"
     if [ "${onstartup_counter}" == "7" ]
@@ -3691,7 +4027,7 @@ function install_nginx() {
       if [ -z "${command_output_message}" ]
       then
         log "INFO" "NGINX web server: Disabled on startup"
-        echo_passed "OK"
+        echo_success "OK"
       else
         log "ERROR" "NGINX web server: Not disabled on startup"
         log "DEBUG" "NGINX web server: ${command_output_message}"
@@ -3699,6 +4035,153 @@ function install_nginx() {
       fi
     else
       log "WARN" "NGINX web server: Already disabled on startup"
+      echo_passed "PASS"
+    fi
+  fi
+}
+# Configure IPTABLES to allow functional streams of Graylog application
+function configure_iptables() {
+  local installed_counter=0
+  local error_counter=0
+  local onstartup_counter=0
+  local command_output_message=
+  local chkconfig_array=
+  local iptables_config_folder="/etc/sysconfig"
+  local iptables_defaultconfig_file="${iptables_config_folder}/iptables"
+  local iptables_defaultbackup_file="${iptables_defaultconfig_file}.dist"
+  echo_message "Install IPTABLES firewall"
+  command_output_message=$(yum list installed | grep iptables.x)
+  if [[ "${command_output_message}" =~ ^iptables\..* ]]
+  then
+    log "WARN" "IPTABLES firewall: Already installed"
+    echo_passed "PASS"
+  else
+    command_output_message=$(yum -y install iptables 2>&1 >/dev/null)
+    if [ -z "${command_output_message}" ] || [[ "${command_output_message}" =~ [Ww]arning.* ]]
+    then
+      log "INFO" "IPTABLES firewall: Successfully installed"
+      echo_success "OK"
+    else
+      log "ERROR" "IPTABLES firewall: Not installed"
+      log "DEBUG" "IPTABLES firewall: ${command_output_message}"
+      echo_failure "FAILED"
+      abort_installation
+    fi
+  fi
+  echo_message "Configure IPTABLES firewall"
+  command_output_message=$(test_file ${iptables_defaultbackup_file})
+  if [ "${command_output_message}" == "0" ]
+  then
+    ((configured_counter++))
+  fi
+  if [ "${configured_counter}" == "1" ]
+  then
+    log "WARN" "IPTABLES firewall: Already configured"
+    echo_passed "PASS"
+  else
+    command_output_message=$(mv ${iptables_defaultconfig_file} ${iptables_defaultbackup_file} 2>&1 >/dev/null)
+    if [ -z "${command_output_message}" ]
+    then
+      log "INFO" "IPTABLES firewall: ${iptables_defaultconfig_file} successfully backed-up"
+    else
+      ((error_counter++))
+      log "ERROR" "IPTABLES firewall: ${iptables_defaultconfig_file} not backed-up"
+      log "DEBUG" "IPTABLES firewall: ${command_output_message}"
+    fi
+    command_output_message=$(cat << EOF > ${iptables_defaultconfig_file}
+*nat
+:PREROUTING ACCEPT [0:0]
+:POSTROUTING ACCEPT [7:420]
+:OUTPUT ACCEPT [7:420]
+-A PREROUTING -i ${NETWORK_INTERFACE_NAME} -p tcp -m tcp --dport ${DEFAULT_SYSLOG_PORT} -j REDIRECT --to-ports ${CUSTOM_SYSLOG_PORT}
+-A PREROUTING -i ${NETWORK_INTERFACE_NAME} -p udp -m udp --dport ${DEFAULT_SYSLOG_PORT} -j REDIRECT --to-ports ${CUSTOM_SYSLOG_PORT}
+-A PREROUTING -i ${NETWORK_INTERFACE_NAME} -p udp -m udp --dport ${DEFAULT_SNMPTRAP_PORT} -j REDIRECT --to-ports ${CUSTOM_SNMPTRAP_PORT}
+COMMIT
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [8160:1329188]
+-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -p icmp -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport ${DEFAULT_SYSLOG_PORT} -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport ${CUSTOM_SYSLOG_PORT} -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 9200 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 9300 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 9350 -j ACCEPT
+-A INPUT -p tcp -m state --state NEW -m tcp --dport 12900 -j ACCEPT
+-A INPUT -p udp -m state --state NEW -m udp --dport ${DEFAULT_SNMPTRAP_PORT} -j ACCEPT
+-A INPUT -p udp -m state --state NEW -m udp --dport ${DEFAULT_SYSLOG_PORT} -j ACCEPT
+-A INPUT -p udp -m state --state NEW -m udp --dport ${CUSTOM_SNMPTRAP_PORT} -j ACCEPT
+-A INPUT -p udp -m state --state NEW -m udp --dport ${CUSTOM_SYSLOG_PORT} -j ACCEPT
+-A INPUT -j REJECT --reject-with icmp-host-prohibited
+-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+COMMIT
+EOF
+2>&1 >/dev/null)
+    if [ -z "${command_output_message}" ]
+    then
+      log "INFO" "IPTABLES firewall: ${nginx_defaultssl_file} successfully modified"
+    else
+      ((error_counter++))
+      log "ERROR" "IPTABLES firewall: ${nginx_defaultssl_file} not modified"
+      log "DEBUG" "IPTABLES firewall: ${command_output_message}"
+    fi
+    if [ "${error_counter}" == "0" ]
+    then
+      log "INFO" "IPTABLES firewall: Successfully configured"
+      echo_success "OK"
+    else
+      echo_failure "FAILED"
+      abort_installation
+    fi
+  fi
+  chkconfig_array=( `chkconfig --list | grep 'iptables'` )
+  for i in "${chkconfig_array[@]}"
+  do
+    value=`echo ${i} | awk -F: '{print $2}'`
+    if [ "${value}" == "off" ]
+    then
+      ((onstartup_counter++))
+    fi
+  done
+  if [[ "${BOOLEAN_IPTABLES_ONSTARTUP}" =~ true ]]
+  then
+    echo_message "Enable IPTABLES firewall on startup"
+    if [ "${onstartup_counter}" == "7" ]
+    then
+      command_output_message=$(chkconfig iptables on 2>&1 >/dev/null)
+      if [ -z "${command_output_message}" ]
+      then
+        log "INFO" "IPTABLES firewall: Successfully enabled on startup"
+        echo_success "OK"
+      else
+        log "ERROR" "IPTABLES firewall: Not enabled on startup"
+        log "DEBUG" "IPTABLES firewall: ${command_output_message}"
+        echo_failure "FAILED"
+      fi
+    else
+      log "WARN" "IPTABLES firewall: Already enabled on startup"
+      echo_passed "PASS"
+    fi
+  else
+    echo_message "Disable IPTABLES firewall on startup"
+    if [ "${onstartup_counter}" != "7" ]
+    then
+      command_output_message=$(chkconfig iptables off 2>&1 >/dev/null)
+      if [ -z "${command_output_message}" ]
+      then
+        log "INFO" "IPTABLES firewall: Disabled on startup"
+        echo_success "OK"
+      else
+        log "ERROR" "IPTABLES firewall: Not disabled on startup"
+        log "DEBUG" "IPTABLES firewall: ${command_output_message}"
+        echo_failure "FAILED"
+      fi
+    else
+      log "WARN" "IPTABLES firewall: Already disabled on startup"
       echo_passed "PASS"
     fi
   fi
@@ -3802,7 +4285,9 @@ function main {
     install_elasticsearch
     install_graylogserver
     install_graylogwebgui
+    install_graylogsnmpplugin
     install_nginx
+    configure_iptables
     display_informations
   fi
 }
