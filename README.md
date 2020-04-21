@@ -3,7 +3,7 @@
 ## Introduction ##
 This shell script installs all Graylog components (server and web) on one server.
 ## Documentations ##
-Find prerequisites and installation documentations in [wiki page](https://github.com/mikael-andre/Graylog/wiki/Wiki)
+Find prerequisites and installation documentations in [wiki page](https://github.com/mikael-andre/Graylog/wiki)
 ## About ##
 ### Author ###
 * Mikaël ANDRE - Unified Communications Engineer at SFR Business
